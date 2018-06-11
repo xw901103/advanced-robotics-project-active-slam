@@ -1,0 +1,251 @@
+#include <ros/ros.h>
+#include <nav_msgs/GetMap.h>
+#include <tf/transform_listener.h>
+#include <actionlib/client/simple_action_client.h>
+#include <move_base_msgs/MoveBaseAction.h>
+#include <boost/random.hpp>
+
+class XU {
+  ros::NodeHandle nodeHandle;
+  tf::TransformListener tfListener;
+  actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> moveBaseActionClient;
+  move_base_msgs::MoveBaseGoal moveBaseGoal;
+  boost::thread processThread;
+  ros::Rate rate;
+  bool moveBaseGoalSent;
+  ros::ServiceClient getMapClient;
+  nav_msgs::OccupancyGrid map;
+  tf::Vector3 location;
+public:
+  XU(const ros::NodeHandle& nodeHandle): nodeHandle(nodeHandle), tfListener(ros::Duration(1.0)), moveBaseActionClient("move_base", true), rate(1.0), moveBaseGoalSent(false) {
+    this->getMapClient = this->nodeHandle.serviceClient<nav_msgs::GetMap>("/dynamic_map");
+    this->processThread = boost::thread(boost::bind(&XU::process, this));
+  }
+
+  void process() {
+    if (!this->moveBaseActionClient.waitForServer()) {
+      ROS_ERROR("[XU] move_base doesn't exist?");
+      return;
+    }
+
+    while(this->nodeHandle.ok()) {
+      //ROS_INFO("[XU] process");
+
+      try {
+        tf::StampedTransform transform;
+        // listen to map_frame and odom_frame came from gmapping
+        this->tfListener.lookupTransform("map", "odom", ros::Time(0), transform);
+        tf::Quaternion q = transform.getRotation();
+        tf::Vector3 v = transform.getOrigin();
+        this->location = v;
+        //ROS_INFO("[XU] slam odom x: %f y: %f orientation: %f", v.x(), v.y(), q.getAngle());
+      } catch (tf::TransformException e) {
+        ROS_ERROR("[XU] %s",e.what());
+      }
+
+      if(!this->getMapClient.isValid()) {
+      		ROS_ERROR("[XU] GetMap-Client is invalid!");
+      } else {
+        nav_msgs::GetMap getMap;
+        if(!this->getMapClient.call(getMap)) {
+          ROS_INFO("[XU] Could not get a map.");
+        } else {
+          this->map = getMap.response.map;
+        }
+      }
+
+      if (this->moveBaseGoalSent == false) {
+
+        this->moveBaseActionClient.cancelAllGoals();
+
+        this->moveBaseGoal.target_pose = this->generateFrontierPose();
+
+        this->moveBaseActionClient.sendGoal(this->moveBaseGoal, boost::bind(&XU::moveBaseDoneCallback, this, _1, _2), boost::bind(&XU::moveBaseActiveCallback, this), boost::bind(&XU::moveBaseFeedbackCallback, this, _1));
+      }
+
+      this->rate.sleep();
+    }
+    ROS_INFO("[XU] process dropped");
+  }
+
+  void moveBaseDoneCallback(const actionlib::SimpleClientGoalState& state, const move_base_msgs::MoveBaseResultConstPtr& result) {
+    //ROS_INFO("[XU] moveBaseDoneCallback");
+    this->moveBaseGoalSent = false;
+  }
+
+  void moveBaseActiveCallback() {
+    //ROS_INFO("[XU] moveBaseActiveCallback");
+    this->moveBaseGoalSent = true;
+  }
+
+  void moveBaseFeedbackCallback(const move_base_msgs::MoveBaseFeedbackConstPtr& feedback) {
+    //ROS_INFO("[XU] moveBaseFeedbackCallback");
+
+    actionlib::SimpleClientGoalState state = this->moveBaseActionClient.getState();
+    //ROS_INFO("[XU] current state %s", this->moveBaseActionClient.getState().toString().c_str());
+    if(state != actionlib::SimpleClientGoalState::ACTIVE && state != actionlib::SimpleClientGoalState::PENDING) {
+      //ROS_INFO("goal state is not ACTIVE or PENDING, current state %s", this->moveBaseActionClient.getState().toString().c_str());
+      this->moveBaseActionClient.cancelAllGoals();
+      this->moveBaseGoalSent = false;
+      return;
+    }
+
+    //if(!this->getMapClient.isValid()) {
+    //		ROS_ERROR("[XU] GetMap-Client is invalid!");
+    //}
+
+    //nav_msgs::GetMap getMap;
+    //if(!this->getMapClient.call(getMap)) {
+    if(this->map.info.width == 0 || this->map.info.height == 0) {
+    	ROS_INFO("[XU] Could not get a map.");
+    } else {
+      //this->map = getMap.response.map;
+
+      //ROS_INFO("[XU] new slam map received width: %d height: %d resolution: %f", this->map.info.width, this->map.info.height, this->map.info.resolution);
+      //ROS_INFO("[XU] map data size: %d", static_cast<int>(this->map.data.size()));
+
+      if(this->moveBaseGoalSent) {
+        int xIndex = static_cast<int>((this->map.info.origin.position.x + this->moveBaseGoal.target_pose.pose.position.x) / this->map.info.resolution) + this->map.info.width;
+        int yIndex = static_cast<int>((this->map.info.origin.position.y + this->moveBaseGoal.target_pose.pose.position.y) / this->map.info.resolution) + this->map.info.height;
+
+        if (this->map.data[yIndex * this->map.info.width + xIndex] != -1) {
+          ROS_INFO("[XU] frontier uncovered");
+          this->moveBaseActionClient.cancelAllGoals();
+          this->moveBaseGoalSent = false;
+        }
+      }
+
+    }
+
+    //if (this->map.data[yIndex * width + xIndex] > 0) {
+    //  ROS_INFO("[XU] frontier uncovered");
+    //}
+  }
+
+  geometry_msgs::PoseStamped generateFrontierPose() {
+    static int lastJ = 0, lastI = 0;
+    geometry_msgs::PoseStamped goalPose;
+    double x = 0.0;
+    double y = 0.0;
+
+    //if(!this->getMapClient.isValid()) {
+    //		ROS_ERROR("[XU] GetMap-Client is invalid!");
+    //}
+
+    //nav_msgs::GetMap getMap;
+    //if(!this->getMapClient.call(getMap)) {
+    if(this->map.info.width == 0 || this->map.info.height == 0) {
+    	ROS_INFO("[XU] Could not get a map.");
+    } else {
+      //this->map = getMap.response.map;
+
+      //ROS_INFO("[XU] new slam map received width: %d height: %d resolution: %f", this->map.info.width, this->map.info.height, this->map.info.resolution);
+      //ROS_INFO("[XU] map data size: %d", static_cast<int>(this->map.data.size()));
+
+      tf::StampedTransform transform;
+      // listen to map_frame and odom_frame came from gmapping
+      this->tfListener.lookupTransform("map", "odom", ros::Time(0), transform);
+      tf::Vector3 position = transform.getOrigin();
+
+      bool found = false;
+      double width = this->map.info.width;
+      double height = this->map.info.height;
+      //double resolution = 1.0 / width / 2.0;
+      double resolution = this->map.info.resolution;
+      //int xIndex = static_cast<int>(width / 2.0 + width * position.x());
+      //int yIndex = static_cast<int>(height / 2.0 + height * position.y());
+      int xIndex = static_cast<int>((this->map.info.origin.position.x + position.x()) / this->map.info.resolution) + width;
+      int yIndex = static_cast<int>((this->map.info.origin.position.y + position.y()) / this->map.info.resolution) + height;
+      //int xIndex = static_cast<int>(position.x() / this->map.info.resolution);
+      //int yIndex = static_cast<int>(position.y() / this->map.info.resolution);
+      //int offset = static_cast<int>(1.0 / resolution);
+      //int step = static_cast<int>(1.0 / resolution);
+      int offset = 1.0 / this->map.info.resolution;
+      int step = 1.0 / this->map.info.resolution;
+      //ROS_INFO("[XU] o %f %f p %d %d offset %d step %d", this->map.info.origin.position.x, this->map.info.origin.position.y, xIndex, yIndex, offset, step);
+      while(!found) {
+        ROS_INFO("[XU] start region %d %d end region %d %d", xIndex - offset * 1, yIndex - offset * 1, xIndex + offset * 1, yIndex + offset * 1);
+        for (int j = yIndex - offset * 2; j <= yIndex + offset * 2 && !found; j += step) {
+        //for (int j = 0; !found; j += step) {
+          for (int i = xIndex - offset * 2; i <= xIndex + offset * 2 && !found; i += step) {
+          //for (int i = 0; !found; i += step) {
+            //ROS_INFO("[XU] %d %d data %d", j, i, this->map.data[j * width + i]);
+            if (this->map.data[j * width + i] == -1 && (j != lastJ || i != lastI)) {
+              lastJ = j;
+              lastI = i;
+              x = (i - width) * this->map.info.resolution - this->map.info.origin.position.x;
+              y = (j - height) * this->map.info.resolution - this->map.info.origin.position.y;
+              found = true;
+
+              //if (this->map.data[(j - offset) * width + (i - offset)] > 0) {
+              //  ROS_INFO("[XU] -- frontier x: %d y: %d", i, j);
+                //x = (i - width / 2) * resolution;
+                //y = (j - height / 2) * resolution;
+              //  x = (i - width - offset) * resolution - this->map.info.origin.position.x;
+              //  y = (j - height - offset) * resolution - this->map.info.origin.position.y;
+              //  found = true;
+              //}
+              //if (this->map.data[(j + offset) * width + (i + offset)] > 0) {
+              //  ROS_INFO("[XU] ++ frontier x: %d y: %d", i, j);
+              //  x = (i - width + offset) * resolution - this->map.info.origin.position.x;
+              //  y = (j - height + offset) * resolution - this->map.info.origin.position.y;
+              //  found = true;
+              //}
+              /*
+              if (this->map.data[(j - offset) * width + (i + offset)] > 0) {
+                ROS_INFO("[XU] +- frontier x: %d y: %d data: %d", i, j, this->map.data[(j - offset) * width + (i + offset)]);
+                x = (i - width + offset) * resolution - this->map.info.origin.position.x;
+                y = (j - height - offset) * resolution - this->map.info.origin.position.y;
+                found = true;
+              }
+              if (this->map.data[(j + offset) * width + (i - offset)] > 0) {
+                ROS_INFO("[XU] -+ frontier x: %d y: %d", i, j);
+                x = (i - width + offset) * resolution - this->map.info.origin.position.x;
+                y = (j - height - offset) * resolution - this->map.info.origin.position.y;
+                found = true;
+              }
+              if (this->map.data[(j + offset) * width + (i - offset)] > 0) {
+                ROS_INFO("[XU] -+ frontier x: %d y: %d", i, j);
+                x = (i - width - offset) * resolution - this->map.info.origin.position.x;
+                y = (j - height + offset) * resolution - this->map.info.origin.position.y;
+                found = true;
+              }
+              */
+            }
+          }
+        }
+        offset += step;
+      }
+
+    }
+
+    //boost::random::mt19937 rng;
+    //boost::uniform_real<double> dist(-10.0, 10.0);
+    //double x = dist(rng) * 10.0;
+    //double y = dist(rng) * 10.0;
+
+    // round the numbers
+    x = static_cast<int>(x * (2.0 / this->map.info.resolution)) * (this->map.info.resolution / 2.0);
+    y = static_cast<int>(y * (2.0 / this->map.info.resolution)) * (this->map.info.resolution / 2.0);
+
+    goalPose.header.stamp = ros::Time::now();
+    goalPose.header.frame_id = "/map";
+    tf::poseTFToMsg(
+      tf::Pose(tf::createQuaternionFromYaw(0.0),
+      tf::Vector3(x, y, 0.0)),
+      goalPose.pose
+    );
+    ROS_INFO("[XU] goal pose x: %f y: %f", x, y);
+
+    return goalPose;
+  }
+
+};
+
+int main(int argc, char** argv) {
+  ros::init( argc, argv, "xu" );
+  ros::NodeHandle nodeHandle("~");
+  XU xu(nodeHandle);
+  ros::spin();
+  return 0;
+}

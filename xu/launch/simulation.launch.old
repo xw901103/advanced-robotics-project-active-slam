@@ -1,0 +1,81 @@
+<launch>
+  <param name="use_sim_time" value="true"/>
+  <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="screen">
+    <remap from="scan" to="base_scan"/>
+    <remap from="map" to="map"/>
+    <param name="map_update_interval" value="5.0"/>
+    <param name="maxUrange" value="16.0"/>
+    <param name="sigma" value="0.05"/>
+    <param name="kernelSize" value="1"/>
+    <param name="lstep" value="0.05"/>
+    <param name="astep" value="0.05"/>
+    <param name="iterations" value="5"/>
+    <param name="lsigma" value="0.075"/>
+    <param name="ogain" value="3.0"/>
+    <param name="lskip" value="0"/>
+    <param name="srr" value="0.1"/>
+    <param name="srt" value="0.2"/>
+    <param name="str" value="0.1"/>
+    <param name="stt" value="0.2"/>
+    <param name="linearUpdate" value="1.0"/>
+    <param name="angularUpdate" value="0.5"/>
+    <param name="temporalUpdate" value="3.0"/>
+    <param name="resampleThreshold" value="0.5"/>
+    <param name="particles" value="30"/>
+    <param name="xmin" value="-100.0"/>
+    <param name="ymin" value="-100.0"/>
+    <param name="xmax" value="100.0"/>
+    <param name="ymax" value="100.0"/>
+    <param name="delta" value="0.05"/>
+    <param name="llsamplerange" value="0.01"/>
+    <param name="llsamplestep" value="0.01"/>
+    <param name="lasamplerange" value="0.005"/>
+    <param name="lasamplestep" value="0.005"/>
+  </node>
+  <node pkg="stage_ros" type="stageros" name="stageros" output="screen" required="true" args="-d $(find pf_localization)/../config/map.world"/>
+  <!--
+  <node pkg="map_server" type="map_server" name="map_server" required="true" args="$(find xu)/../config/map.yaml"/>
+  -->
+  <!--
+  <node pkg="map_server" type="map_saver" name="map_saver" required="true" args="-f $(find xu)/output/map"/>
+   -->
+  <!--
+  <node pkg="xu" type="map_frame.py" name="map_frame" output="screen" required="true"/>
+   -->
+  <node pkg="xu" type="xu" name="xu" required="true" output="screen">
+    <param name="beams_number" type="int" value="10"/>
+    <param name="particles_number" type="int" value="1000"/>
+    <param name="map_width" type="double" value="6.44"/>
+    <param name="map_height" type="double" value="3.33"/>
+    <param name="map_resolution" type="double" value="0.01"/>
+    <param name="grid_resolution" type="double" value="0.1"/>
+    <param name="start_x" type="double" value="-1.00"/>
+    <param name="start_y" type="double" value="1.50"/>
+    <param name="goal_x" type="double" value="2.50"/>
+    <param name="goal_y" type="double" value="1.50"/>
+    <param name="map_path" type="string" value="$(find xu)/../config/map.png"/>
+  </node>
+
+  <node pkg="teleop_twist_keyboard" type="teleop_twist_keyboard.py" name="teleop_twist_keyboard" output="screen" required="true" />
+  <node pkg="rviz" type="rviz" name="rviz" output="screen" required="true" args="-d $(find xu)/../config/xu_conf.rviz"/>
+
+  <env name="GAZEBO_MODEL_PATH" value="$(find fetch_gazebo)/models:$(optenv GAZEBO_MODEL_PATH)" />
+
+  <arg name="robot" default="fetch"/>
+  <arg name="debug" default="false"/>
+  <arg name="gui" default="true"/>
+  <arg name="headless" default="false"/>
+
+  <!-- Start Gazebo with a blank world -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="debug" value="$(arg debug)" />
+    <arg name="gui" value="$(arg gui)" />
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="headless" value="$(arg headless)"/>
+    <arg name="world_name" value="$(find fetch_gazebo)/worlds/test_zone.sdf"/>
+  </include>
+
+  <!-- Oh, you wanted a robot? -->
+  <include file="$(find fetch_gazebo)/launch/include/$(arg robot).launch.xml" />
+</launch>

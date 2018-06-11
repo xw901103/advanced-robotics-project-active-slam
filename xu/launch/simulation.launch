@@ -1,0 +1,135 @@
+<launch>
+  <arg name="use_sim_time" default="true" />
+  <param name="use_sim_time" value="$(arg use_sim_time)"/>
+
+  <env name="GAZEBO_MODEL_PATH" value="$(find fetch_gazebo)/models:$(optenv GAZEBO_MODEL_PATH)" />
+
+  <arg name="robot_name" default="droid_0" />
+  <arg name="robot_prefix" default="droid_0"/>
+  <arg name="robot" default="fetch"/>
+  <arg name="debug" default="false"/>
+  <arg name="gui" default="true"/>
+  <arg name="headless" default="false"/>
+  <arg name="log_path" default="$(find xu)/logs"/>
+  <arg name="output" default="screen"/>
+  <arg name="frontier_selection" default="1"/>
+
+  <!-- Start Gazebo with a blank world -->
+  <!--
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="debug" value="$(arg debug)" />
+    <arg name="gui" value="$(arg gui)" />
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="headless" value="$(arg headless)"/>
+    <arg name="world_name" value="$(find fetch_gazebo)/worlds/test_zone.sdf"/>
+  </include>
+  -->
+
+  <!-- Oh, you wanted a robot? -->
+  <include file="$(find fetch_gazebo)/launch/include/$(arg robot).launch.xml" />
+
+  <!-- SIMULATION -->
+  <node pkg="explorer" type="explorer" name="explorer" output="$(arg output)">
+  	<!-- costmaps -->
+  	<param name="local_costmap/robot_base_frame" value="$(arg robot_prefix)/base_footprint" />
+    <param name="local_costmap/global_frame" value="$(arg robot_prefix)/odom" />
+    <param name="robot_prefix" value="$(arg robot_prefix)"/>
+  	<param name="global_costmap/robot_base_frame" value="$(arg robot_prefix)/base_footprint" />
+
+    <!--
+  	<param name="global_costmap/global_frame" value="$(arg robot_prefix)/map" />
+     -->
+  	<param name="global_costmap/map_topic" value="map_merger/global_map" />
+  	<param name="local_costmap/map_topic" value="map_merger/global_map" />
+    <param name="global_costmap/global_frame" value="map" />
+    <!--
+   	<param name="global_costmap/map_topic" value="map" />
+   	<param name="local_costmap/map_topic" value="map" />
+     -->
+
+  	<param name="local_costmap/observation_sources" value="scan" />
+  	<param name="local_costmap/scan/topic" value="base_scan" />
+  	<param name="local_costmap/scan/data_type" value="LaserScan" />
+  	<param name="local_costmap/scan/marking" value="true" />
+  	<param name="local_costmap/scan/clearing" value="true" />
+  	<param name="observation_persistence" value="0.1" />
+  	<param name="local_costmap/base_scan/marking" value="true" />
+
+  	<!-- simulation parameters -->
+    <param name="log_path" value="$(arg log_path)" />
+  	<param name="robot_name" value="$(arg robot_name)" />
+
+  	<!-- move_base -->
+  	<param name="base_link" value="$(arg robot_prefix)/base_link" />
+  	<param name="move_base_frame" value="$(arg robot_prefix)/map" />
+
+  	<!-- exploration parameters -->
+  	<param name="frontier_selection" value="$(arg frontier_selection)" />
+  	<rosparam file="$(find explorer)/param/simulation_costmap_common_params.yaml" command="load" ns="global_costmap" />
+  	<rosparam file="$(find explorer)/param/simulation_costmap_common_params.yaml" command="load" ns="local_costmap" />
+  	<rosparam file="$(find explorer)/param/simulation_local_costmap_params.yaml" command="load" />
+  	<rosparam file="$(find explorer)/param/simulation_global_costmap_params.yaml" command="load" />
+
+    <!--
+    <remap from="/$(arg robot_name)/$(arg robot_name)/map" to="/$(arg robot_name)/map" />
+     -->
+    <!-- <remap from="/$(arg robot_name)/$(arg robot_name)/base_scan" to="/$(arg robot_name)/base_scan" /> -->
+  </node>
+  <!--
+  <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="screen">
+    <remap from="scan" to="base_scan"/>
+    <remap from="map" to="map"/>
+    <param name="map_update_interval" value="5.0"/>
+    <param name="maxUrange" value="16.0"/>
+    <param name="sigma" value="0.05"/>
+    <param name="kernelSize" value="1"/>
+    <param name="lstep" value="0.05"/>
+    <param name="astep" value="0.05"/>
+    <param name="iterations" value="5"/>
+    <param name="lsigma" value="0.075"/>
+    <param name="ogain" value="3.0"/>
+    <param name="lskip" value="0"/>
+    <param name="srr" value="0.1"/>
+    <param name="srt" value="0.2"/>
+    <param name="str" value="0.1"/>
+    <param name="stt" value="0.2"/>
+    <param name="linearUpdate" value="1.0"/>
+    <param name="angularUpdate" value="0.5"/>
+    <param name="temporalUpdate" value="3.0"/>
+    <param name="resampleThreshold" value="0.5"/>
+    <param name="particles" value="30"/>
+    <param name="xmin" value="-100.0"/>
+    <param name="ymin" value="-100.0"/>
+    <param name="xmax" value="100.0"/>
+    <param name="ymax" value="100.0"/>
+    <param name="delta" value="0.05"/>
+    <param name="llsamplerange" value="0.01"/>
+    <param name="llsamplestep" value="0.01"/>
+    <param name="lasamplerange" value="0.005"/>
+    <param name="lasamplestep" value="0.005"/>
+  </node>
+   -->
+  <!--
+  <node pkg="xu" type="xu" name="xu" required="true" output="screen">
+    <param name="beams_number" type="int" value="10"/>
+    <param name="particles_number" type="int" value="1000"/>
+    <param name="map_width" type="double" value="6.44"/>
+    <param name="map_height" type="double" value="3.33"/>
+    <param name="map_resolution" type="double" value="0.01"/>
+    <param name="grid_resolution" type="double" value="0.1"/>
+    <param name="start_x" type="double" value="-1.00"/>
+    <param name="start_y" type="double" value="1.50"/>
+    <param name="goal_x" type="double" value="2.50"/>
+    <param name="goal_y" type="double" value="1.50"/>
+    <param name="map_path" type="string" value="$(find xu)/../config/map.png"/>
+  </node>
+   -->
+  <!--
+  <node pkg="teleop_twist_keyboard" type="teleop_twist_keyboard.py" name="teleop_twist_keyboard" output="screen" required="true" />
+   -->
+  <!--
+  <node pkg="rviz" type="rviz" name="rviz" output="screen" required="true" args="-d $(find xu)/../config/xu_conf.rviz"/>
+  <node pkg="rviz" type="rviz" name="rviz" output="screen" required="true"/>
+   -->
+</launch>

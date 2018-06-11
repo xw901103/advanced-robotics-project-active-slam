@@ -1,0 +1,52 @@
+<launch>
+  <arg name="use_sim_time" default="true" />
+  <arg name="droid" default="fetch" />
+  <arg name="output" default="screen" />
+  <arg name="use_gmapping" default="true" />
+  <arg name="use_rviz" default="true"/>
+  <arg name="use_move_base" default="true" />
+  <arg name="use_xu" default="true"/>
+
+  <!-- Navigation parameter files -->
+  <arg name="move_base_include" default="$(find fetch_navigation)/launch/include/move_base.launch.xml" />
+
+  <param name="use_sim_time" value="$(arg use_sim_time)" />
+
+  <node if="$(arg use_gmapping)" pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="$(arg output)">
+    <remap from="scan" to="base_scan"/>
+    <remap from="map" to="map"/>
+    <param name="map_update_interval" value="1.0"/>
+
+    <param name="maxUrange" value="10.0"/>
+    <param name="maxRange" value="25.0"/>
+    <param name="xmin" value="-5.0"/>
+    <param name="xmax" value="5.0"/>
+    <param name="ymin" value="-5.0"/>
+    <param name="ymax" value="5.0"/>
+  </node>
+
+  <!-- move the robot -->
+  <include if="$(arg use_move_base)" file="$(arg move_base_include)" >
+    <arg name="name" value="$(arg droid)" />
+  </include>
+
+  <!-- tilt the head -->
+  <node pkg="fetch_navigation" type="tilt_head.py" name="tilt_head_node" />
+
+  <!-- RVIZ to view the visualization -->
+	<node if="$(arg use_rviz)" name="RVIZ" pkg="rviz" type="rviz" args="-d $(find xu)/config/xu.rviz" />
+
+  <node if="$(arg use_xu)" name="xu" pkg="xu" type="xu" output="$(arg output)" respawn="true">
+    <param name="navigator" type="string" value="move_base"/>
+    <param name="grid_resolution" type="double" value="1.0"/>
+    <param name="origin_offset" type="double" value="0.8"/>
+    <!--
+    <param name="exploration_strategy" type="string" value="midway"/>
+    <param name="exploration_strategy" type="string" value="farthest_first"/>
+    -->
+    <param name="exploration_strategy" type="string" value="nearest_first"/>
+    <param name="midway_factor" type="double" value="1.0"/>
+    <param name="send_goal" type="bool" value="true"/>
+  </node>
+
+</launch>

@@ -1,0 +1,30 @@
+/**
+ *   * * *   * * *
+ *       *
+ *   *   *   * * *
+ *   *   *
+ *   *   *   * * *
+ *   *   *
+ *   *   * * * * *
+ */
+#include "droid/droid.h"
+
+int main( int argc, char ** argv ) {
+  std::cout << "***********" << std::endl;
+  std::cout << "*         *" << std::endl;
+  std::cout << "* *** *** *" << std::endl;
+  std::cout << "*   *     *" << std::endl;
+  std::cout << "* * * *** *" << std::endl;
+  std::cout << "* * *     *" << std::endl;
+  std::cout << "* * * *** *" << std::endl;
+  std::cout << "* * *     *" << std::endl;
+  std::cout << "* * ***** *" << std::endl;
+  std::cout << "*         *" << std::endl;
+  std::cout << "***********" << std::endl;
+
+  ros::init( argc, argv, "xu" );
+  ros::NodeHandle nodeHandle("~");
+  droid::Droid xu(nodeHandle);
+  ros::spin();
+  return 1;
+}

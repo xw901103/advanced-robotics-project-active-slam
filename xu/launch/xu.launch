@@ -1,0 +1,259 @@
+<launch>
+  <arg name="use_sim_time" default="true" />
+  <arg name="droid" default="fetch" />
+  <arg name="output" default="screen" />
+  <arg name="use_karto" default="false" />
+  <arg name="use_gmapping" default="true" />
+  <arg name="use_rtabmap" default="false" />
+  <arg name="use_rviz" default="true"/>
+  <arg name="use_rtabmapviz" default="false"/>
+  <arg name="use_move_base" default="true" />
+  <arg name="use_nav2d" default="false"/>
+  <arg name="use_explorer" default="false"/>
+  <arg name="use_frontier_exploration" default="false"/>
+  <arg name="use_xu" default="false"/>
+
+  <!-- Navigation parameter files -->
+  <arg name="move_base_include" default="$(find fetch_navigation)/launch/include/move_base.launch.xml" />
+
+  <param name="use_sim_time" value="$(arg use_sim_time)" />
+
+  <node if="$(arg use_karto)" pkg="slam_karto" type="slam_karto" name="slam_karto" output="$(arg output)">
+    <remap from="scan" to="base_scan" />
+  </node>
+
+  <node if="$(arg use_gmapping)" pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="screen">
+    <remap from="scan" to="base_scan"/>
+    <remap from="map" to="map"/>
+    <!--
+    <remap from="dynamic_map" to="get_grid_map"/>
+     -->
+    <param name="map_update_interval" value="1.0"/>
+
+    <param name="maxUrange" value="10.0"/>
+    <param name="maxRange" value="25.0"/>
+    <param name="xmin" value="-5.0"/>
+    <param name="xmax" value="5.0"/>
+    <param name="ymin" value="-5.0"/>
+    <param name="ymax" value="5.0"/>
+  </node>
+
+  <!-- Odometry -->
+  <!--
+  <node pkg="rtabmap_ros" type="rgbd_odometry" name="rgbd_odometry" output="screen">
+    <remap from="rgb/image" to="/head_camera/rgb/image_raw"/>
+    <remap from="depth/image" to="/head_camera/depth_registered/image_raw"/>
+    <remap from="rgb/camera_info" to="/head_camera/rgb/camera_info"/>
+
+    <param name="frame_id" type="string" value="base_link"/>
+    <remap from="odom" to="odom"/>
+  </node>
+  -->
+  <node if="$(arg use_rtabmap)" name="rtabmap" pkg="rtabmap_ros" type="rtabmap" output="screen" args="--delete_db_on_start">
+    <param name="frame_id" type="string" value="base_link"/>
+
+    <param name="subscribe_depth" type="bool" value="true"/>
+    <param name="subscribe_scan" type="bool" value="true"/>
+
+    <remap from="odom" to="odom"/>
+    <remap from="scan" to="base_scan"/>
+
+    <remap from="proj_map" to="map"/>
+    <remap from="grid_map" to="grid_map"/>
+
+    <remap from="get_proj_map" to="get_map" />
+    <remap from="get_map" to="get_rtabmap" />
+
+    <remap from="rgb/image" to="/head_camera/rgb/image_raw"/>
+    <remap from="depth/image" to="/head_camera/depth_registered/image_raw"/>
+    <remap from="rgb/camera_info" to="/head_camera/rgb/camera_info"/>
+
+    <param name="queue_size" type="int" value="10"/>
+
+    <!-- RTAB-Map's parameters -->
+    <param name="RGBD/NeighborLinkRefining" type="string" value="true"/>
+    <param name="RGBD/ProximityBySpace"     type="string" value="true"/>
+    <param name="RGBD/AngularUpdate"        type="string" value="0.01"/>
+    <param name="RGBD/LinearUpdate"         type="string" value="0.01"/>
+    <param name="RGBD/OptimizeFromGraphEnd" type="string" value="false"/>
+
+    <param name="Optimizer/Slam2D"          type="string" value="true"/>
+    <param name="Reg/Strategy"              type="string" value="1"/>--><!-- 1=ICP -->
+    <param name="Reg/Force3DoF"             type="string" value="true"/>
+    <param name="Vis/MinInliers"            type="string" value="5"/>
+    <param name="Vis/InlierDistance"        type="string" value="0.1"/>
+    <param name="Rtabmap/TimeThr"           type="string" value="700"/>
+    <param name="Mem/RehearsalSimilarity"   type="string" value="0.45"/>
+
+    <param name="proj_max_height" type="double" value="4.0" />
+  </node>
+
+  <!-- move the robot -->
+  <include if="$(arg use_move_base)" file="$(arg move_base_include)" >
+    <arg name="name" value="$(arg droid)" />
+  </include>
+
+  <group if="$(arg use_nav2d)">
+    <rosparam file="$(find xu)/param/$(arg droid)/ros.yaml"/>
+    <!-- Start the Operator to control the simulated robot -->
+    <!--
+    <node name="Operator" pkg="nav2d_operator" type="operator" output="screen">
+  	  <remap from="scan" to="base_scan"/>
+  	  <rosparam file="$(find xu)/param/$(arg droid)/operator.yaml"/>
+  	  <rosparam file="$(find xu)/param/$(arg droid)/costmap.yaml" ns="local_map" />
+    </node>
+    -->
+    <!-- Start the Operator to control the simulated robot -->
+    <node name="Operator" pkg="nav2d_operator" type="operator" >
+    	<remap from="scan" to="base_scan"/>
+    	<rosparam file="$(find xu)/param/$(arg droid)/operator.yaml"/>
+    	<rosparam file="$(find xu)/param/$(arg droid)/costmap.yaml" ns="local_map" />
+    </node>
+    <!-- Start the Navigator to move the robot autonomously -->
+    <!--
+  	<node name="Navigator" pkg="nav2d_navigator" type="navigator" output="screen">
+  		<rosparam file="$(find xu)/param/$(arg droid)/navigator.yaml"/>
+    </node>
+    -->
+    <node name="Navigator" pkg="nav2d_navigator" type="navigator">
+			<rosparam file="$(find xu)/param/$(arg droid)/navigator.yaml"/>
+    </node>
+    <!--
+    <node name="Mapper" pkg="nav2d_karto" type="mapper">
+    	<remap from="scan" to="base_scan"/>
+    	<rosparam file="$(find xu)/param/$(arg droid)/mapper.yaml"/>
+    </node>
+    -->
+    <!--
+    <node name="GetMap" pkg="nav2d_navigator" type="get_map_client" output="screen"/>
+    <node name="Explore" pkg="nav2d_navigator" type="explore_client" output="screen"/>
+    -->
+    <!--
+    <node name="Localize" pkg="nav2d_navigator" type="localize_client" />
+    -->
+    <node name="SetGoal" pkg="nav2d_navigator" type="set_goal_client" output="screen">
+      <remap from="goal" to="/xu/goal" />
+    </node>
+    <node name="Explore" pkg="nav2d_navigator" type="explore_client" />
+    <!--
+    <node pkg="teleop_twist_keyboard" type="teleop_twist_keyboard.py" name="teleop_twist_keyboard" output="screen" required="true" />
+    -->
+  </group>
+
+  <!-- tilt the head -->
+  <node pkg="fetch_navigation" type="tilt_head.py" name="tilt_head_node" />
+
+  <!-- RVIZ to view the visualization -->
+	<node if="$(arg use_rviz)" name="RVIZ" pkg="rviz" type="rviz" args="-d $(find xu)/config/xu.rviz" />
+  <!-- Visualisation RTAB-Map -->
+  <node if="$(arg use_rtabmapviz)" pkg="rtabmap_ros" type="rtabmapviz" name="rtabmapviz" args="-d $(find rtabmap_ros)/launch/config/rgbd_gui.ini" output="screen">
+    <param name="subscribe_depth"     type="bool" value="true"/>
+    <param name="subscribe_scan" type="bool" value="false"/>
+    <param name="frame_id" type="string" value="base_link"/>
+
+    <remap from="proj_map" to="map"/>
+
+    <remap from="rgb/image" to="/head_camera/rgb/image_raw"/>
+    <remap from="depth/image" to="/head_camera/depth_registered/image_raw"/>
+    <remap from="rgb/camera_info" to="/head_camera/rgb/camera_info"/>
+    <remap from="scan"            to="/base_scan"/>
+    <remap from="odom"            to="odom"/>
+
+    <param name="rgb/image_transport"   type="string" value="compressed"/>
+    <param name="depth/image_transport" type="string" value="compressedDepth"/>
+  </node>
+
+  <!-- SIMULATION -->
+  <node if="$(arg use_explorer)" pkg="explorer" type="explorer" name="explorer" output="screen">
+  	<!-- costmaps -->
+  	<param name="local_costmap/robot_base_frame" value="/base_link" />
+    <param name="local_costmap/global_frame" value="/odom" />
+    <param name="robot_prefix" value="droid_0"/>
+  	<param name="global_costmap/robot_base_frame" value="/base_link" />
+  	<param name="global_costmap/global_frame" value="/map" />
+  	<param name="global_costmap/map_topic" value="map_merger/global_map" />
+  	<param name="local_costmap/map_topic" value="map_merger/global_map" />
+  	<param name="local_costmap/observation_sources" value="scan" />
+  	<param name="local_costmap/scan/topic" value="base_scan" />
+  	<param name="local_costmap/scan/data_type" value="LaserScan" />
+  	<param name="local_costmap/scan/marking" value="true" />
+  	<param name="local_costmap/scan/clearing" value="true" />
+  	<param name="observation_persistence" value="0.1" />
+  	<param name="local_costmap/base_scan/marking" value="true" />
+
+  	<!-- simulation parameters -->
+    <param name="log_path" value="$(find xu)/logs/" />
+  	<param name="robot_name" value="droid_0" />
+
+  	<!-- move_base -->
+  	<param name="base_link" value="/base_link" />
+  	<param name="move_base_frame" value="/map" />
+
+  	<!-- exploration parameters -->
+  	<param name="frontier_selection" value="1" />
+  	<rosparam file="$(find explorer)/param/simulation_costmap_common_params.yaml" command="load" ns="global_costmap" />
+  	<rosparam file="$(find explorer)/param/simulation_costmap_common_params.yaml" command="load" ns="local_costmap" />
+  	<rosparam file="$(find explorer)/param/simulation_local_costmap_params.yaml" command="load" />
+  	<rosparam file="$(find explorer)/param/simulation_global_costmap_params.yaml" command="load" />
+
+    <remap from="/map" to="/map" />
+    <!-- <remap from="/$(arg robot_name)/$(arg robot_name)/base_scan" to="/$(arg robot_name)/base_scan" /> -->
+  </node>
+
+  <!--
+  <node if="$(arg use_frontier_exploration)" pkg="frontier_exploration" type="explore_client" name="explore_client" output="$(arg output)"/>
+  -->
+
+  <node if="$(arg use_frontier_exploration)" pkg="frontier_exploration" type="explore_server" name="explore_server" output="$(arg output)">
+    <param name="frequency" type="double" value="1.0"/>
+    <!--
+    <rosparam ns="explore_costmap" subst_value="true">
+      robot_radius: 0.30
+
+      transform_tolerance: 0.5
+      update_frequency: 5.0
+      publish_frequency: 2.0
+      resolution: 0.025
+
+      global_frame: map
+      robot_base_frame: base_link
+
+      rolling_window: true
+      track_unknown_space: true
+
+      plugins:
+        - {name: static, type: "costmap_2d::StaticLayer"}
+        - {name: explore_boundary, type: "frontier_exploration::BoundedExploreLayer"}
+        - {name: inflation, type: "costmap_2d::InflationLayer"}
+
+      static:
+        #Can pull data from gmapping, map_server or a non-rolling costmap
+        map_topic: /map
+        # map_topic: move_base/global_costmap/costmap
+        subscribe_to_updates: true
+
+      explore_boundary:
+        resize_to_boundary: false
+        frontier_travel_point: middle
+        #set to false for gmapping, true if re-exploring a known area
+        explore_clear_space: false
+
+      inflation:
+        robot_radius: 0.3
+        inflation_radius: 0.7
+    </rosparam>
+    -->
+  </node>
+  <node if="$(arg use_xu)" name="xu" pkg="xu" type="xu" output="$(arg output)" respawn="true">
+    <param name="navigator" type="string" value="move_base"/>
+    <param name="grid_resolution" type="double" value="1.0"/>
+    <param name="origin_offset" type="double" value="0.8"/>
+    <!--
+    <param name="exploration_strategy" type="string" value="midway"/>
+    <param name="exploration_strategy" type="string" value="farthest_first"/>
+    -->
+    <param name="exploration_strategy" type="string" value="nearest_first"/>
+    <param name="midway_factor" type="double" value="1.0"/>
+    <param name="send_goal" type="bool" value="true"/>
+  </node>
+</launch>

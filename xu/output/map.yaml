@@ -1,0 +1,7 @@
+image: /home/xu/ros_workspace/src/pdroid/output/map.pgm
+resolution: 0.010000
+origin: [-3.220000, -1.665000, 0.000000]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196
+
